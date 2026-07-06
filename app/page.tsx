@@ -14,32 +14,32 @@ export default async function Home() {
 
   return (
     <main className="site-shell">
-      <header className="top-nav" aria-label="Main navigation">
-        <a className="brand" href={withBasePath("/")} aria-label="MotionSites home">
+      <header className="top-nav" aria-label="主导航">
+        <a className="brand" href={withBasePath("/")} aria-label="MotionSites 首页">
           <span className="brand-mark">M</span>
           <span>motionsites</span>
         </a>
 
         <nav className="nav-links">
-          <a href="#gallery">Sections <em>NEW</em></a>
-          <a href="#gallery">Backgrounds <em>NEW</em></a>
-          <a href="mailto:hello@example.com">Contact Us</a>
-          <a href={withBasePath("/admin")}>Admin</a>
-          <a className="pill-button small" href={withBasePath("/admin")}>Upload</a>
+          <a href="#gallery">板块 <em>新</em></a>
+          <a href="#gallery">背景 <em>新</em></a>
+          <a href="mailto:hello@example.com">联系我们</a>
+          <a href={withBasePath("/admin")}>管理</a>
+          <a className="pill-button small" href={withBasePath("/admin")}>上传</a>
         </nav>
       </header>
 
       <section className="hero-section">
-        <p className="eyebrow">NEW VIDEOS ADDED DAILY</p>
+        <p className="eyebrow">每日上新</p>
         <h1>
-          Jaw-dropping
-          <span>Animated Backgrounds</span>
+          惊艳的
+          <span>动态背景</span>
         </h1>
         <p className="hero-copy">
-          A curated collection of cinematic MP4 loops, ready to preview and publish.
+          精选电影级 MP4 动态循环,即点即预览,即取即用。
         </p>
         <a className="pill-button hero-button" href="#gallery">
-          Go Unlimited <span aria-hidden="true">→</span>
+          无限畅享 <span aria-hidden="true">→</span>
         </a>
       </section>
 

@@ -1,12 +1,12 @@
 [
   {
     "id": "sample-1-aurora-ridge",
-    "title": "Aurora Ridge",
-    "category": "Cinematic Worlds",
+    "title": "极光山脊",
+    "category": "电影世界",
     "tags": [
-      "clouds",
-      "island",
-      "warm"
+      "云朵",
+      "岛屿",
+      "温暖"
     ],
     "src": "/samples/aurora-ridge.mp4",
     "poster": "/samples/aurora-ridge.jpg",
@@ -15,12 +15,12 @@
   },
   {
     "id": "sample-2-lunar-meadow",
-    "title": "Lunar Meadow",
-    "category": "Dream Landscapes",
+    "title": "月夜草甸",
+    "category": "梦幻风景",
     "tags": [
-      "moon",
-      "meadow",
-      "quiet"
+      "月亮",
+      "草甸",
+      "宁静"
     ],
     "src": "/samples/lunar-meadow.mp4",
     "poster": "/samples/lunar-meadow.jpg",
@@ -29,12 +29,12 @@
   },
   {
     "id": "sample-3-neon-ripples",
-    "title": "Neon Ripple Field",
-    "category": "Abstract Loops",
+    "title": "霓虹涟漪",
+    "category": "抽象循环",
     "tags": [
-      "neon",
-      "blue",
-      "waves"
+      "霓虹",
+      "蓝色",
+      "波浪"
     ],
     "src": "/samples/neon-ripples.mp4",
     "poster": "/samples/neon-ripples.jpg",
@@ -43,12 +43,12 @@
   },
   {
     "id": "sample-4-garden-ceiling",
-    "title": "Garden Ceiling",
-    "category": "Nature Scenes",
+    "title": "花园穹顶",
+    "category": "自然景观",
     "tags": [
-      "flowers",
-      "sky",
-      "fresh"
+      "花朵",
+      "天空",
+      "清新"
     ],
     "src": "/samples/garden-ceiling.mp4",
     "poster": "/samples/garden-ceiling.jpg",
@@ -57,12 +57,12 @@
   },
   {
     "id": "sample-5-sunset-villa",
-    "title": "Sunset Villa Glow",
-    "category": "Architecture",
+    "title": "日落别墅",
+    "category": "建筑",
     "tags": [
-      "sunset",
-      "villa",
-      "cinematic"
+      "日落",
+      "别墅",
+      "电影级"
     ],
     "src": "/samples/sunset-villa.mp4",
     "poster": "/samples/sunset-villa.jpg",
@@ -71,12 +71,12 @@
   },
   {
     "id": "sample-6-candy-bloom",
-    "title": "Candy Bloom",
-    "category": "Characters",
+    "title": "糖果绽放",
+    "category": "角色",
     "tags": [
-      "pink",
-      "rabbit",
-      "playful"
+      "粉色",
+      "兔子",
+      "活泼"
     ],
     "src": "/samples/candy-bloom.mp4",
     "poster": "/samples/candy-bloom.jpg",

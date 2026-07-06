@@ -19,14 +19,14 @@ export default async function AdminPage() {
           <span className="brand-mark">M</span>
           <span>motionsites</span>
         </a>
-        <a className="pill-button small" href={withBasePath("/")}>View site</a>
+        <a className="pill-button small" href={withBasePath("/")}>查看站点</a>
       </header>
 
       <section className="admin-hero">
-        <p className="eyebrow left">ADMIN UPLOAD</p>
-        <h1>Upload MP4 backgrounds</h1>
+        <p className="eyebrow left">后台上传</p>
+        <h1>上传 MP4 动态背景</h1>
         <p>
-          Add cinematic background loops, posters, categories, and tags. New uploads appear on the homepage immediately.
+          添加电影级动态背景、封面图、分类和标签。新上传的内容会立即出现在首页。
         </p>
       </section>
 

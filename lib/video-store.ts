@@ -100,15 +100,15 @@ export async function saveUploadedVideo(formData: FormData) {
   const video = formData.get("video");
 
   if (!(video instanceof File) || video.size === 0) {
-    throw new Error("Please upload a valid video file.");
+    throw new Error("请上传有效的视频文件。");
   }
 
   if (video.size > MAX_VIDEO_BYTES) {
-    throw new Error("Video is too large. The local demo limit is 250 MB.");
+    throw new Error("视频过大。本地演示限制为 250 MB。");
   }
 
-  const title = cleanText(formData.get("title"), "Untitled Video");
-  const category = cleanText(formData.get("category"), "Animated Background");
+  const title = cleanText(formData.get("title"), "未命名视频");
+  const category = cleanText(formData.get("category"), "动态背景");
   const tags = parseTags(formData.get("tags"));
   const featured = formData.get("featured") === "on" || formData.get("featured") === "true";
 

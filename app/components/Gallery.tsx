@@ -65,7 +65,7 @@ function VideoCard({
           <strong>{video.title}</strong>
           <span>{video.category}</span>
         </span>
-        <span className="preview-chip">Preview</span>
+        <span className="preview-chip">预览</span>
       </button>
     </article>
   );
@@ -105,8 +105,8 @@ export default function Gallery({ videos }: GalleryProps) {
     <section className="gallery-section" id="gallery">
       <div className="gallery-toolbar">
         <div>
-          <p className="eyebrow left">BROWSE LIBRARY</p>
-          <h2>Preview MP4 backgrounds</h2>
+          <p className="eyebrow left">浏览图库</p>
+          <h2>预览 MP4 动态背景</h2>
         </div>
 
         <div className="filters">
@@ -114,15 +114,15 @@ export default function Gallery({ videos }: GalleryProps) {
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search videos"
-            aria-label="Search videos"
+            placeholder="搜索视频"
+            aria-label="搜索视频"
           />
           <select
             value={category}
             onChange={(event) => setCategory(event.target.value)}
-            aria-label="Filter by category"
+            aria-label="按分类筛选"
           >
-            <option value="All">All categories</option>
+            <option value="All">全部分类</option>
             {categories.map((item) => (
               <option value={item} key={item}>
                 {item}
@@ -133,7 +133,7 @@ export default function Gallery({ videos }: GalleryProps) {
       </div>
 
       {filtered.length === 0 ? (
-        <div className="empty-state">No videos match this filter.</div>
+        <div className="empty-state">没有符合该筛选条件的视频。</div>
       ) : (
         <>
           <div className="featured-grid">
@@ -154,7 +154,7 @@ export default function Gallery({ videos }: GalleryProps) {
         <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={() => setSelected(null)}>
           <div className="preview-modal" onClick={(event) => event.stopPropagation()}>
             <button className="modal-close" type="button" onClick={() => setSelected(null)}>
-              Close
+              关闭
             </button>
             <video src={withBasePath(selected.src)} poster={withBasePath(selected.poster)} controls autoPlay playsInline />
             <div className="modal-copy">

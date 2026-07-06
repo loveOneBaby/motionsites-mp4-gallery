@@ -18,7 +18,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   if (!isAuthorized(request)) {
-    return NextResponse.json({ error: "Invalid admin password." }, { status: 401 });
+    return NextResponse.json({ error: "管理密码无效。" }, { status: 401 });
   }
 
   try {
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ video }, { status: 201 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Upload failed.";
+    const message = error instanceof Error ? error.message : "上传失败。";
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }

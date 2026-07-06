@@ -16,13 +16,13 @@ export async function DELETE(
   context: { params: { id: string } }
 ) {
   if (!isAuthorized(request)) {
-    return NextResponse.json({ error: "Invalid admin password." }, { status: 401 });
+    return NextResponse.json({ error: "管理密码无效。" }, { status: 401 });
   }
 
   const deleted = await deleteVideo(context.params.id);
 
   if (!deleted) {
-    return NextResponse.json({ error: "Video not found." }, { status: 404 });
+    return NextResponse.json({ error: "未找到该视频。" }, { status: 404 });
   }
 
   return NextResponse.json({ video: deleted });

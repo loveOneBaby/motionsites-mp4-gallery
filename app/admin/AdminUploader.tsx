@@ -41,7 +41,7 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
 
   async function refreshVideos() {
     if (isStaticPreview) {
-      setMessage("GitHub Pages preview is read-only. Run the Node app or deploy to a server to upload videos.");
+      setMessage("GitHub Pages 预览为只读。请运行 Node 应用或部署到服务器后再上传视频。");
       return;
     }
 
@@ -53,12 +53,12 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
   async function handleUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isStaticPreview) {
-      setMessage("GitHub Pages preview is read-only. Run the Node app or deploy to a server to upload videos.");
+      setMessage("GitHub Pages 预览为只读。请运行 Node 应用或部署到服务器后再上传视频。");
       return;
     }
 
     setBusy(true);
-    setMessage("Uploading...");
+    setMessage("上传中…");
 
     const form = event.currentTarget;
     const formData = new FormData(form);
@@ -72,23 +72,23 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
     const payload = (await response.json()) as { error?: string; video?: VideoItem };
 
     if (!response.ok || !payload.video) {
-      setMessage(payload.error || "Upload failed.");
+      setMessage(payload.error || "上传失败。");
       setBusy(false);
       return;
     }
 
     form.reset();
     setVideos((current) => [payload.video!, ...current]);
-    setMessage("Uploaded successfully.");
+    setMessage("上传成功。");
     setBusy(false);
   }
 
   async function handleDelete(id: string) {
-    const confirmed = window.confirm("Delete this video from the library?");
+    const confirmed = window.confirm("确定从图库中删除该视频吗?");
     if (!confirmed) return;
 
     if (isStaticPreview) {
-      setMessage("GitHub Pages preview is read-only. Run the Node app or deploy to a server to delete videos.");
+      setMessage("GitHub Pages 预览为只读。请运行 Node 应用或部署到服务器后再删除视频。");
       return;
     }
 
@@ -100,12 +100,12 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
     const payload = (await response.json()) as { error?: string };
 
     if (!response.ok) {
-      setMessage(payload.error || "Delete failed.");
+      setMessage(payload.error || "删除失败。");
       return;
     }
 
     setVideos((current) => current.filter((video) => video.id !== id));
-    setMessage("Deleted.");
+    setMessage("已删除。");
   }
 
   return (
@@ -113,52 +113,52 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
       <form className="upload-panel" onSubmit={handleUpload}>
         {isStaticPreview && (
           <p className="status-message static-preview-note">
-            Static GitHub Pages preview: upload and delete actions are disabled here.
+            GitHub Pages 静态预览:此处禁用上传和删除操作。
           </p>
         )}
         <label>
-          Admin password
+          管理密码
           <input
             value={password}
             onChange={(event) => savePassword(event.target.value)}
             type="password"
-            placeholder="Value from ADMIN_PASSWORD"
+            placeholder="来自 ADMIN_PASSWORD 的值"
             autoComplete="current-password"
           />
         </label>
 
         <label>
-          Title
-          <input name="title" required placeholder="Aurora valley loop" />
+          标题
+          <input name="title" required placeholder="极光山谷循环" />
         </label>
 
         <label>
-          Category
-          <input name="category" required defaultValue="Animated Background" />
+          分类
+          <input name="category" required defaultValue="动态背景" />
         </label>
 
         <label>
-          Tags
-          <input name="tags" placeholder="cinematic, clouds, dreamy" />
+          标签
+          <input name="tags" placeholder="电影级, 云朵, 梦幻" />
         </label>
 
         <label>
-          MP4 / WebM / MOV file
+          MP4 / WebM / MOV 文件
           <input name="video" type="file" accept="video/mp4,video/webm,video/quicktime" required />
         </label>
 
         <label>
-          Poster image, optional
+          封面图(可选)
           <input name="poster" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
         </label>
 
         <label className="checkbox-row">
           <input name="featured" type="checkbox" />
-          <span>Feature this video in the large top cards</span>
+          <span>在顶部大卡片中推荐该视频</span>
         </label>
 
         <button className="pill-button upload-submit" type="submit" disabled={busy || isStaticPreview}>
-          {busy ? "Uploading..." : "Upload video"}
+          {busy ? "上传中…" : "上传视频"}
         </button>
 
         {message && <p className="status-message">{message}</p>}
@@ -166,8 +166,8 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
 
       <div className="admin-list-panel">
         <div className="admin-list-heading">
-          <h2>Library</h2>
-          <button type="button" onClick={refreshVideos} disabled={isStaticPreview}>Refresh</button>
+          <h2>图库</h2>
+          <button type="button" onClick={refreshVideos} disabled={isStaticPreview}>刷新</button>
         </div>
 
         <div className="admin-video-list">
@@ -177,9 +177,9 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
               <div>
                 <strong>{video.title}</strong>
                 <span>{video.category}</span>
-                {video.featured && <em>Featured</em>}
+                {video.featured && <em>推荐</em>}
               </div>
-              <button type="button" onClick={() => handleDelete(video.id)} disabled={isStaticPreview}>Delete</button>
+              <button type="button" onClick={() => handleDelete(video.id)} disabled={isStaticPreview}>删除</button>
             </article>
           ))}
         </div>
