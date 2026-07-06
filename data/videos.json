@@ -1,0 +1,86 @@
+[
+  {
+    "id": "sample-1-aurora-ridge",
+    "title": "Aurora Ridge",
+    "category": "Cinematic Worlds",
+    "tags": [
+      "clouds",
+      "island",
+      "warm"
+    ],
+    "src": "/samples/aurora-ridge.mp4",
+    "poster": "/samples/aurora-ridge.jpg",
+    "featured": true,
+    "createdAt": "2025-01-10T12:00:00.000Z"
+  },
+  {
+    "id": "sample-2-lunar-meadow",
+    "title": "Lunar Meadow",
+    "category": "Dream Landscapes",
+    "tags": [
+      "moon",
+      "meadow",
+      "quiet"
+    ],
+    "src": "/samples/lunar-meadow.mp4",
+    "poster": "/samples/lunar-meadow.jpg",
+    "featured": true,
+    "createdAt": "2025-01-09T12:00:00.000Z"
+  },
+  {
+    "id": "sample-3-neon-ripples",
+    "title": "Neon Ripple Field",
+    "category": "Abstract Loops",
+    "tags": [
+      "neon",
+      "blue",
+      "waves"
+    ],
+    "src": "/samples/neon-ripples.mp4",
+    "poster": "/samples/neon-ripples.jpg",
+    "featured": false,
+    "createdAt": "2025-01-08T12:00:00.000Z"
+  },
+  {
+    "id": "sample-4-garden-ceiling",
+    "title": "Garden Ceiling",
+    "category": "Nature Scenes",
+    "tags": [
+      "flowers",
+      "sky",
+      "fresh"
+    ],
+    "src": "/samples/garden-ceiling.mp4",
+    "poster": "/samples/garden-ceiling.jpg",
+    "featured": false,
+    "createdAt": "2025-01-07T12:00:00.000Z"
+  },
+  {
+    "id": "sample-5-sunset-villa",
+    "title": "Sunset Villa Glow",
+    "category": "Architecture",
+    "tags": [
+      "sunset",
+      "villa",
+      "cinematic"
+    ],
+    "src": "/samples/sunset-villa.mp4",
+    "poster": "/samples/sunset-villa.jpg",
+    "featured": false,
+    "createdAt": "2025-01-06T12:00:00.000Z"
+  },
+  {
+    "id": "sample-6-candy-bloom",
+    "title": "Candy Bloom",
+    "category": "Characters",
+    "tags": [
+      "pink",
+      "rabbit",
+      "playful"
+    ],
+    "src": "/samples/candy-bloom.mp4",
+    "poster": "/samples/candy-bloom.jpg",
+    "featured": false,
+    "createdAt": "2025-01-05T12:00:00.000Z"
+  }
+]
