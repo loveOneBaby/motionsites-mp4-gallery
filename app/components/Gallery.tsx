@@ -30,14 +30,17 @@ function VideoCard({
   onOpen: (video: VideoItem) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const isImage = video.kind === "image";
 
   function playPreview() {
+    if (isImage) return;
     const element = videoRef.current;
     if (!element) return;
     element.play().catch(() => undefined);
   }
 
   function stopPreview() {
+    if (isImage) return;
     const element = videoRef.current;
     if (!element) return;
     element.pause();
@@ -51,21 +54,30 @@ function VideoCard({
       onMouseLeave={stopPreview}
     >
       <button className="video-hit-area" type="button" onClick={() => onOpen(video)}>
-        <video
-          ref={videoRef}
-          src={withBasePath(video.src)}
-          poster={withBasePath(video.poster)}
-          muted
-          loop
-          playsInline
-          preload="metadata"
-        />
+        {isImage ? (
+          <img
+            src={withBasePath(video.src)}
+            alt={video.title}
+            loading="lazy"
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          />
+        ) : (
+          <video
+            ref={videoRef}
+            src={withBasePath(video.src)}
+            poster={withBasePath(video.poster)}
+            muted
+            loop
+            playsInline
+            preload="metadata"
+          />
+        )}
         <span className="video-vignette" />
         <span className="card-meta">
           <strong>{video.title}</strong>
           <span>{video.category}</span>
         </span>
-        <span className="preview-chip">预览</span>
+        {!isImage && <span className="preview-chip">预览</span>}
       </button>
     </article>
   );
@@ -156,7 +168,15 @@ export default function Gallery({ videos }: GalleryProps) {
             <button className="modal-close" type="button" onClick={() => setSelected(null)}>
               关闭
             </button>
-            <video src={withBasePath(selected.src)} poster={withBasePath(selected.poster)} controls autoPlay playsInline />
+            {selected.kind === "image" ? (
+              <img
+                src={withBasePath(selected.src)}
+                alt={selected.title}
+                style={{ maxWidth: "100%", maxHeight: "80vh", display: "block" }}
+              />
+            ) : (
+              <video src={withBasePath(selected.src)} poster={withBasePath(selected.poster)} controls autoPlay playsInline />
+            )}
             <div className="modal-copy">
               <span>{selected.category}</span>
               <h3>{selected.title}</h3>

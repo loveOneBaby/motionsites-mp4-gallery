@@ -82,5 +82,19 @@
     "poster": "/samples/candy-bloom.jpg",
     "featured": false,
     "createdAt": "2025-01-05T12:00:00.000Z"
+  },
+  {
+    "id": "sample-7-sunset-villa-photo",
+    "title": "日落别墅(静态图)",
+    "category": "建筑",
+    "tags": [
+      "日落",
+      "别墅",
+      "静帧"
+    ],
+    "src": "/samples/sunset-villa.jpg",
+    "featured": false,
+    "createdAt": "2025-01-04T12:00:00.000Z",
+    "kind": "image"
   }
 ]

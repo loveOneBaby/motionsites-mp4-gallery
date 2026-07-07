@@ -4,7 +4,11 @@ import {
   recordVideo,
   newVideoId,
   cleanText,
-  parseTags
+  parseTags,
+  kindOfExtension,
+  safeExtension,
+  VIDEO_EXTENSIONS,
+  IMAGE_EXTENSIONS
 } from "../../../lib/video-store";
 import { publicUrlFor } from "../../../lib/r2";
 
@@ -33,24 +37,33 @@ export async function POST(request: NextRequest) {
     category?: string;
     tags?: string;
     featured?: boolean | string;
-    videoKey?: string;
+    mediaKey?: string;
     posterKey?: string;
+    kind?: "video" | "image";
   };
 
-  if (!body.videoKey || typeof body.videoKey !== "string") {
-    return NextResponse.json({ error: "缺少视频文件标识(videoKey)。" }, { status: 400 });
+  if (!body.mediaKey || typeof body.mediaKey !== "string") {
+    return NextResponse.json({ error: "缺少媒体文件标识(mediaKey)。" }, { status: 400 });
+  }
+
+  // 若未显式给出 kind,按 mediaKey 的扩展名推断。
+  let kind = body.kind;
+  if (!kind) {
+    const ext = safeExtension(body.mediaKey, new Set([...VIDEO_EXTENSIONS, ...IMAGE_EXTENSIONS]), ".mp4");
+    kind = kindOfExtension(ext) || "video";
   }
 
   try {
     const item = {
       id: newVideoId(),
-      title: cleanText(body.title, "未命名视频"),
+      title: cleanText(body.title, "未命名媒体"),
       category: cleanText(body.category, "动态背景"),
       tags: parseTags(body.tags),
-      src: publicUrlFor(body.videoKey),
+      src: publicUrlFor(body.mediaKey),
       poster: body.posterKey ? publicUrlFor(body.posterKey) : undefined,
       featured: body.featured === true || body.featured === "on" || body.featured === "true",
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      kind
     };
 
     await recordVideo(item);

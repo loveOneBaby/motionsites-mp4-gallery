@@ -12,6 +12,8 @@ export type VideoItem = {
   poster?: string;
   featured: boolean;
   createdAt: string;
+  /** 媒体类型:视频或图片。旧数据没有该字段时按视频处理。 */
+  kind?: "video" | "image";
 };
 
 const ROOT = process.cwd();
@@ -20,7 +22,14 @@ const DB_PATH = path.join(DATA_DIR, "videos.json");
 
 export const MAX_VIDEO_BYTES = 250 * 1024 * 1024;
 export const VIDEO_EXTENSIONS = new Set([".mp4", ".webm", ".mov", ".m4v"]);
-export const POSTER_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
+export const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
+
+/** 判断媒体扩展名属于视频还是图片。 */
+export function kindOfExtension(ext: string): "video" | "image" | null {
+  if (VIDEO_EXTENSIONS.has(ext)) return "video";
+  if (IMAGE_EXTENSIONS.has(ext)) return "image";
+  return null;
+}
 
 /** 生成新的视频记录 ID。 */
 export function newVideoId(): string {

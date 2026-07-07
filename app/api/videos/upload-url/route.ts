@@ -3,7 +3,7 @@ import { createPresignedPut } from "../../../../lib/r2";
 import {
   MAX_VIDEO_BYTES,
   VIDEO_EXTENSIONS,
-  POSTER_EXTENSIONS,
+  IMAGE_EXTENSIONS,
   safeExtension,
   newVideoId
 } from "../../../../lib/video-store";
@@ -20,12 +20,13 @@ function isAuthorized(request: NextRequest) {
 
 type FileSpec = { filename?: string; contentType?: string; size?: number };
 
-function buildObjectSpec(file: FileSpec, kind: "video" | "poster") {
-  const allowed = kind === "video" ? VIDEO_EXTENSIONS : POSTER_EXTENSIONS;
-  const fallback = kind === "video" ? ".mp4" : ".jpg";
+function buildObjectSpec(file: FileSpec, kind: "media" | "poster") {
+  // media:视频或图片;poster:仅图片。
+  const allowed = kind === "media" ? new Set([...VIDEO_EXTENSIONS, ...IMAGE_EXTENSIONS]) : IMAGE_EXTENSIONS;
+  const fallback = kind === "media" ? ".mp4" : ".jpg";
   const ext = safeExtension(file.filename || "", allowed, fallback);
-  const contentType = file.contentType || (kind === "video" ? "video/mp4" : "image/jpeg");
-  const folder = kind === "video" ? "uploads/videos" : "uploads/posters";
+  const contentType = file.contentType || (kind === "poster" ? "image/jpeg" : "video/mp4");
+  const folder = kind === "poster" ? "uploads/posters" : "uploads/media";
   const key = `${folder}/${newVideoId()}${ext}`;
   return { key, contentType };
 }
@@ -35,32 +36,32 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "管理密码无效。" }, { status: 401 });
   }
 
-  const body = (await request.json()) as { video?: FileSpec; poster?: FileSpec | null };
-  const video = body.video;
+  const body = (await request.json()) as { media?: FileSpec; poster?: FileSpec | null };
 
-  if (!video || !video.filename || typeof video.size !== "number") {
-    return NextResponse.json({ error: "缺少视频文件信息。" }, { status: 400 });
+  const media = body.media;
+  if (!media || !media.filename || typeof media.size !== "number") {
+    return NextResponse.json({ error: "缺少文件信息。" }, { status: 400 });
   }
 
-  if (video.size > MAX_VIDEO_BYTES) {
-    return NextResponse.json({ error: "视频过大。限制为 250 MB。" }, { status: 413 });
+  if (media.size > MAX_VIDEO_BYTES) {
+    return NextResponse.json({ error: "文件过大。限制为 250 MB。" }, { status: 413 });
   }
 
   try {
-    const videoSpec = buildObjectSpec(video, "video");
-    const videoUploadUrl = await createPresignedPut({
-      key: videoSpec.key,
-      contentType: videoSpec.contentType
+    const mediaSpec = buildObjectSpec(media, "media");
+    const mediaUploadUrl = await createPresignedPut({
+      key: mediaSpec.key,
+      contentType: mediaSpec.contentType
     });
 
     const result: {
-      video: { key: string; uploadUrl: string; contentType: string };
+      media: { key: string; uploadUrl: string; contentType: string };
       poster?: { key: string; uploadUrl: string; contentType: string };
     } = {
-      video: {
-        key: videoSpec.key,
-        uploadUrl: videoUploadUrl,
-        contentType: videoSpec.contentType
+      media: {
+        key: mediaSpec.key,
+        uploadUrl: mediaUploadUrl,
+        contentType: mediaSpec.contentType
       }
     };
 
