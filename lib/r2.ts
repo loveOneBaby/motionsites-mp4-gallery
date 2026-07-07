@@ -1,4 +1,9 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+  GetObjectCommand
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 // Cloudflare R2 对象存储配置(仅服务端使用,绝不可在客户端组件中引用)。
@@ -8,6 +13,9 @@ const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
 const R2_BUCKET = process.env.R2_BUCKET;
 // 公开访问基础域名(自定义域名或 https://pub-xxxx.r2.dev),用于拼接视频播放 URL。
 const R2_PUBLIC_BASE_URL = (process.env.R2_PUBLIC_BASE_URL || "").replace(/\/+$/, "");
+
+// 视频元数据在 R2 中的存储 key(serverless 部署时用,替代本地 data/videos.json)。
+const METADATA_KEY = "metadata/videos.json";
 
 let cachedClient: S3Client | null = null;
 
@@ -62,6 +70,35 @@ export async function createPresignedPut({
     { expiresIn: 600 }
   );
   return url;
+}
+
+/** 读取 R2 中的元数据 JSON;对象不存在时返回 null。 */
+export async function getJsonMetadata<T>(): Promise<T | null> {
+  try {
+    const response = await getClient().send(
+      new GetObjectCommand({ Bucket: R2_BUCKET, Key: METADATA_KEY })
+    );
+    const text = await response.Body?.transformToString("utf8");
+    if (!text) return null;
+    return JSON.parse(text) as T;
+  } catch (error) {
+    const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
+    const name = (error as { name?: string }).name;
+    if (status === 404 || name === "NoSuchKey") return null;
+    throw error;
+  }
+}
+
+/** 把元数据 JSON 写入 R2。 */
+export async function putJsonMetadata(data: unknown): Promise<void> {
+  await getClient().send(
+    new PutObjectCommand({
+      Bucket: R2_BUCKET,
+      Key: METADATA_KEY,
+      Body: JSON.stringify(data, null, 2),
+      ContentType: "application/json"
+    })
+  );
 }
 
 /** 根据公开 URL 删除对应 R2 对象(仅删除属于本 R2 域名的对象,本地样例不动)。 */
