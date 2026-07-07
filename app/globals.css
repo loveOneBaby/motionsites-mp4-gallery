@@ -224,6 +224,35 @@ select {
   color: #151515;
 }
 
+.kind-toggle {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+}
+.kind-toggle-item {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 14px;
+  opacity: 0.7;
+}
+.kind-toggle-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  opacity: 1;
+}
+.kind-toggle-item.is-active {
+  background: var(--panel);
+  opacity: 1;
+  font-weight: 600;
+}
+
 .featured-grid,
 .video-grid {
   display: grid;

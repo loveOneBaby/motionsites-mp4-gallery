@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import Link from "next/link";
 import Gallery from "./components/Gallery";
 import { getVideos } from "../lib/video-store";
 
@@ -21,11 +23,10 @@ export default async function Home() {
         </a>
 
         <nav className="nav-links">
-          <a href="#gallery">板块 <em>新</em></a>
-          <a href="#gallery">背景 <em>新</em></a>
+          <Link href={{ pathname: "/", query: { kind: "video" }, hash: "gallery" }}>视频</Link>
+          <Link href={{ pathname: "/", query: { kind: "image" }, hash: "gallery" }}>图片</Link>
           <a href="mailto:hello@example.com">联系我们</a>
-          <a href={withBasePath("/admin")}>管理</a>
-          <a className="pill-button small" href={withBasePath("/admin")}>上传</a>
+          <Link href="/admin" className="pill-button small">管理</Link>
         </nav>
       </header>
 
@@ -33,17 +34,19 @@ export default async function Home() {
         <p className="eyebrow">每日上新</p>
         <h1>
           惊艳的
-          <span>动态背景</span>
+          <span>动态背景与图片</span>
         </h1>
         <p className="hero-copy">
-          精选电影级 MP4 动态循环,即点即预览,即取即用。
+          精选电影级 MP4 循环与图片,即点即预览,即取即用。
         </p>
-        <a className="pill-button hero-button" href="#gallery">
+        <Link className="pill-button hero-button" href={{ pathname: "/", hash: "gallery" }}>
           无限畅享 <span aria-hidden="true">→</span>
-        </a>
+        </Link>
       </section>
 
-      <Gallery videos={videos} />
+      <Suspense fallback={null}>
+        <Gallery videos={videos} />
+      </Suspense>
     </main>
   );
 }

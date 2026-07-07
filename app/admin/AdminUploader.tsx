@@ -477,6 +477,12 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
           onClick={() => fileInputRef.current?.click()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              fileInputRef.current?.click();
+            }
+          }}
           role="button"
           tabIndex={0}
         >

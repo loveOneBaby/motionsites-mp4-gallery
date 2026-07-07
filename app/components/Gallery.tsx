@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import type { VideoItem } from "../../lib/video-store";
 
 type GalleryProps = {
   videos: VideoItem[];
 };
+
+type KindFilter = "all" | "video" | "image";
 
 function uniqueCategories(videos: VideoItem[]) {
   return Array.from(new Set(videos.map((video) => video.category))).filter(Boolean);
@@ -18,6 +22,10 @@ function withBasePath(path?: string) {
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
   const normalized = path.startsWith("/") ? path : `/${path}`;
   return `${basePath}${normalized}`;
+}
+
+function mediaKind(video: VideoItem): "video" | "image" {
+  return video.kind === "image" ? "image" : "video";
 }
 
 function VideoCard({
@@ -55,11 +63,7 @@ function VideoCard({
     >
       <button className="video-hit-area" type="button" onClick={() => onOpen(video)}>
         {isImage ? (
-          <img
-            src={withBasePath(video.src)}
-            alt={video.title}
-            loading="lazy"
-          />
+          <img src={withBasePath(video.src)} alt={video.title} loading="lazy" />
         ) : (
           <video
             ref={videoRef}
@@ -82,7 +86,33 @@ function VideoCard({
   );
 }
 
+function KindToggle({ active }: { active: KindFilter }) {
+  const options: { label: string; kind: KindFilter }[] = [
+    { label: "全部", kind: "all" },
+    { label: "视频", kind: "video" },
+    { label: "图片", kind: "image" }
+  ];
+  return (
+    <div className="kind-toggle" role="group" aria-label="按类型筛选">
+      {options.map((opt) => (
+        <Link
+          key={opt.kind}
+          href={{ pathname: "/", query: opt.kind === "all" ? {} : { kind: opt.kind }, hash: "gallery" }}
+          className={`kind-toggle-item ${active === opt.kind ? "is-active" : ""}`}
+          aria-current={active === opt.kind ? "page" : undefined}
+        >
+          {opt.label}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
 export default function Gallery({ videos }: GalleryProps) {
+  const searchParams = useSearchParams();
+  const rawKind = searchParams.get("kind");
+  const kindFilter: KindFilter = rawKind === "video" || rawKind === "image" ? rawKind : "all";
+
   const [selected, setSelected] = useState<VideoItem | null>(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
@@ -94,11 +124,12 @@ export default function Gallery({ videos }: GalleryProps) {
 
     return videos.filter((video) => {
       const matchesCategory = category === "All" || video.category === category;
+      const matchesKind = kindFilter === "all" || mediaKind(video) === kindFilter;
       const searchable = [video.title, video.category, ...video.tags].join(" ").toLowerCase();
       const matchesQuery = !normalizedQuery || searchable.includes(normalizedQuery);
-      return matchesCategory && matchesQuery;
+      return matchesCategory && matchesQuery && matchesKind;
     });
-  }, [videos, category, query]);
+  }, [videos, category, query, kindFilter]);
 
   const featured = filtered.slice(0, 2);
   const rest = filtered.slice(2);
@@ -117,16 +148,17 @@ export default function Gallery({ videos }: GalleryProps) {
       <div className="gallery-toolbar">
         <div>
           <p className="eyebrow left">浏览图库</p>
-          <h2>预览 MP4 动态背景</h2>
+          <h2>媒体库</h2>
         </div>
 
         <div className="filters">
+          <KindToggle active={kindFilter} />
           <input
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="搜索视频"
-            aria-label="搜索视频"
+            placeholder="搜索标题 / 标签"
+            aria-label="搜索媒体"
           />
           <select
             value={category}
@@ -144,7 +176,7 @@ export default function Gallery({ videos }: GalleryProps) {
       </div>
 
       {filtered.length === 0 ? (
-        <div className="empty-state">没有符合该筛选条件的视频。</div>
+        <div className="empty-state">没有符合该筛选条件的媒体。</div>
       ) : (
         <>
           <div className="featured-grid">
@@ -164,7 +196,7 @@ export default function Gallery({ videos }: GalleryProps) {
       {selected && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={() => setSelected(null)}>
           <div className="preview-modal" onClick={(event) => event.stopPropagation()}>
-            <button className="modal-close" type="button" onClick={() => setSelected(null)}>
+            <button className="modal-close" type="button" onClick={() => setSelected(null)} autoFocus>
               关闭
             </button>
             {selected.kind === "image" ? (
