@@ -23,6 +23,36 @@ function apiPath(path: string) {
   return `${basePath}${path}`;
 }
 
+/** 用 XHR 直传到 R2 预签名地址,带上传进度。 */
+function putFile(
+  url: string,
+  file: File,
+  contentType: string,
+  onProgress: (pct: number) => void
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url, true);
+    xhr.setRequestHeader("Content-Type", contentType);
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        onProgress(Math.round((event.loaded / event.total) * 100));
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new Error(`上传失败 (HTTP ${xhr.status})`));
+    };
+    xhr.onerror = () => reject(new Error("网络错误,上传失败。"));
+    xhr.send(file);
+  });
+}
+
+type UploadUrls = {
+  video: { key: string; uploadUrl: string; contentType: string };
+  poster?: { key: string; uploadUrl: string; contentType: string };
+};
+
 export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
   const [videos, setVideos] = useState(initialVideos);
   const [password, setPassword] = useState("");
@@ -52,35 +82,92 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
 
   async function handleUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
     if (isStaticPreview) {
       setMessage("GitHub Pages 预览为只读。请运行 Node 应用或部署到服务器后再上传视频。");
       return;
     }
 
-    setBusy(true);
-    setMessage("上传中…");
-
     const form = event.currentTarget;
     const formData = new FormData(form);
+    const videoFile = formData.get("video");
 
-    const response = await fetch(apiPath("/api/videos"), {
-      method: "POST",
-      body: formData,
-      headers: password ? { "x-admin-password": password } : undefined
-    });
-
-    const payload = (await response.json()) as { error?: string; video?: VideoItem };
-
-    if (!response.ok || !payload.video) {
-      setMessage(payload.error || "上传失败。");
-      setBusy(false);
+    if (!(videoFile instanceof File) || videoFile.size === 0) {
+      setMessage("请选择视频文件。");
       return;
     }
 
-    form.reset();
-    setVideos((current) => [payload.video!, ...current]);
-    setMessage("上传成功。");
-    setBusy(false);
+    const posterFile = formData.get("poster");
+    const hasPoster = posterFile instanceof File && posterFile.size > 0;
+    const authHeaders = password ? { "x-admin-password": password } : undefined;
+
+    setBusy(true);
+    setMessage("获取上传地址…");
+
+    try {
+      // 1) 向服务端申请预签名直传地址
+      const urlResponse = await fetch(apiPath("/api/videos/upload-url"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({
+          video: {
+            filename: videoFile.name,
+            contentType: videoFile.type || "video/mp4",
+            size: videoFile.size
+          },
+          poster: hasPoster
+            ? {
+                filename: posterFile.name,
+                contentType: posterFile.type || "image/jpeg",
+                size: posterFile.size
+              }
+            : null
+        })
+      });
+
+      const urls = (await urlResponse.json()) as UploadUrls & { error?: string };
+      if (!urlResponse.ok) {
+        throw new Error(urls.error || "获取上传地址失败。");
+      }
+
+      // 2) 浏览器直接 PUT 到 R2(带进度)
+      await putFile(urls.video.uploadUrl, videoFile, urls.video.contentType, (pct) =>
+        setMessage(`正在上传视频 ${pct}%`)
+      );
+
+      if (hasPoster && urls.poster) {
+        setMessage("正在上传封面图…");
+        await putFile(urls.poster.uploadUrl, posterFile as File, urls.poster.contentType, () => undefined);
+      }
+
+      // 3) 回传元数据,写入图库
+      setMessage("保存记录…");
+      const recordResponse = await fetch(apiPath("/api/videos"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({
+          title: String(formData.get("title") || ""),
+          category: String(formData.get("category") || ""),
+          tags: String(formData.get("tags") || ""),
+          featured: formData.get("featured") === "on",
+          videoKey: urls.video.key,
+          posterKey: urls.poster?.key
+        })
+      });
+
+      const payload = (await recordResponse.json()) as { error?: string; video?: VideoItem };
+      if (!recordResponse.ok || !payload.video) {
+        throw new Error(payload.error || "保存失败。");
+      }
+
+      form.reset();
+      setVideos((current) => [payload.video!, ...current]);
+      setMessage("上传成功。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "上传失败。");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handleDelete(id: string) {

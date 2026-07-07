@@ -106,6 +106,54 @@ GitHub Pages is static hosting, so it can preview the gallery UI and bundled sam
 
 For real uploads in production, deploy the Node/Next.js app to a server that supports persistent storage, or move video assets to object storage such as S3, Cloudflare R2, or Supabase Storage.
 
+## Cloudflare R2 视频存储配置
+
+上传的视频存储在 Cloudflare R2(10GB 免费 + 出站流量免费 + 全球 CDN)。上传采用**预签名直传**:浏览器先向本应用申请一个临时 PUT 地址,然后直接把文件传到 R2,不经过应用服务器,因此大文件也不受 serverless 请求体/超时限制。
+
+### 1. 创建 R2 资源
+
+1. Cloudflare 控制台 → R2 → 创建存储桶(如 `motionsites-videos`)。
+2. 创建 R2 API Token:权限选「对象读和写」,记录 `Access Key ID`、`Secret Access Key`。
+3. 记下账户 `Account ID`(R2 概览页右上角)。
+4. 开启公开访问:Settings → Public access,绑定自定义域名(推荐,如 `https://cdn.example.com`)或启用 `r2.dev` 临时地址。
+
+### 2. 配置 CORS(浏览器直传必需)
+
+R2 存储桶 → Settings → CORS Policy,加入应用来源。否则浏览器 PUT 会被跨域拦截。
+
+```json
+[
+  {
+    "AllowedOrigins": [
+      "http://localhost:3000",
+      "https://你的生产域名"
+    ],
+    "AllowedMethods": ["GET", "PUT", "HEAD"],
+    "AllowedHeaders": ["Content-Type"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+### 3. 填写本地配置
+
+```bash
+cp .env.local.example .env.local
+```
+
+在 `.env.local` 中填入 `R2_ACCOUNT_ID`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`R2_BUCKET`、`R2_PUBLIC_BASE_URL`。
+
+### 4. 本地测试上传
+
+```bash
+npm install
+npm run dev
+```
+
+打开 `http://localhost:3000/admin`,选择视频文件上传。流程为:取预签名地址 → 浏览器直传 R2(带进度)→ 回传元数据写入 `data/videos.json`。视频 `src` 即 R2 公开 URL,经 Cloudflare CDN 分发。
+
+> GitHub Pages 静态预览仍为只读,上传需运行 Node 应用或部署到支持服务端的环境(Vercel / Railway / Fly.io / VPS 等)。
+
 ## Scripts
 
 ```bash

@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getVideos, saveUploadedVideo } from "../../../lib/video-store";
+import {
+  getVideos,
+  recordVideo,
+  newVideoId,
+  cleanText,
+  parseTags
+} from "../../../lib/video-store";
+import { publicUrlFor } from "../../../lib/r2";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,13 +28,35 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "管理密码无效。" }, { status: 401 });
   }
 
-  try {
-    const formData = await request.formData();
-    const video = await saveUploadedVideo(formData);
+  const body = (await request.json()) as {
+    title?: string;
+    category?: string;
+    tags?: string;
+    featured?: boolean | string;
+    videoKey?: string;
+    posterKey?: string;
+  };
 
-    return NextResponse.json({ video }, { status: 201 });
+  if (!body.videoKey || typeof body.videoKey !== "string") {
+    return NextResponse.json({ error: "缺少视频文件标识(videoKey)。" }, { status: 400 });
+  }
+
+  try {
+    const item = {
+      id: newVideoId(),
+      title: cleanText(body.title, "未命名视频"),
+      category: cleanText(body.category, "动态背景"),
+      tags: parseTags(body.tags),
+      src: publicUrlFor(body.videoKey),
+      poster: body.posterKey ? publicUrlFor(body.posterKey) : undefined,
+      featured: body.featured === true || body.featured === "on" || body.featured === "true",
+      createdAt: new Date().toISOString()
+    };
+
+    await recordVideo(item);
+    return NextResponse.json({ video: item }, { status: 201 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "上传失败。";
-    return NextResponse.json({ error: message }, { status: 400 });
+    const message = error instanceof Error ? error.message : "保存失败。";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

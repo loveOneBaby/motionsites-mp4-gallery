@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { deleteVideo } from "../../../../lib/video-store";
+import { deleteR2ObjectByUrl } from "../../../../lib/r2";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,6 +25,12 @@ export async function DELETE(
   if (!deleted) {
     return NextResponse.json({ error: "未找到该视频。" }, { status: 404 });
   }
+
+  // 尽力清理 R2 对象;失败不阻塞元数据已删除的结果。
+  await Promise.all([
+    deleteR2ObjectByUrl(deleted.src).catch(() => undefined),
+    deleteR2ObjectByUrl(deleted.poster).catch(() => undefined)
+  ]);
 
   return NextResponse.json({ video: deleted });
 }
