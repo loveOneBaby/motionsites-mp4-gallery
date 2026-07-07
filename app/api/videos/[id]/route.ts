@@ -1,36 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
-import { deleteVideo } from "../../../../lib/video-store";
+import { deleteVideo, findVideo } from "../../../../lib/video-store";
 import { deleteR2ObjectByUrl } from "../../../../lib/r2";
+import { isAuthorized } from "../../../../lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function isAuthorized(request: NextRequest) {
-  const adminPassword = process.env.ADMIN_PASSWORD;
-  if (!adminPassword) return true;
-
-  return request.headers.get("x-admin-password") === adminPassword;
-}
 
 export async function DELETE(
   request: NextRequest,
   context: { params: { id: string } }
 ) {
   if (!isAuthorized(request)) {
-    return NextResponse.json({ error: "管理密码无效。" }, { status: 401 });
+    return NextResponse.json({ error: "未登录或管理密码无效。" }, { status: 401 });
   }
 
-  const deleted = await deleteVideo(context.params.id);
-
-  if (!deleted) {
-    return NextResponse.json({ error: "未找到该视频。" }, { status: 404 });
+  const target = await findVideo(context.params.id);
+  if (!target) {
+    return NextResponse.json({ error: "未找到该媒体。" }, { status: 404 });
   }
 
-  // 尽力清理 R2 对象;失败不阻塞元数据已删除的结果。
-  await Promise.all([
-    deleteR2ObjectByUrl(deleted.src).catch(() => undefined),
-    deleteR2ObjectByUrl(deleted.poster).catch(() => undefined)
-  ]);
+  // 先删 R2 对象;失败则保留元数据,避免产生断链(对象没了、记录还在)。
+  try {
+    await deleteR2ObjectByUrl(target.src);
+    if (target.poster) await deleteR2ObjectByUrl(target.poster);
+  } catch {
+    return NextResponse.json(
+      { error: "删除存储对象失败,元数据已保留,请重试。" },
+      { status: 500 }
+    );
+  }
 
-  return NextResponse.json({ video: deleted });
+  await deleteVideo(context.params.id);
+  return NextResponse.json({ video: target });
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPresignedPut } from "../../../../lib/r2";
+import { isAuthorized } from "../../../../lib/auth";
 import {
   MAX_VIDEO_BYTES,
   VIDEO_EXTENSIONS,
@@ -10,13 +11,6 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function isAuthorized(request: NextRequest) {
-  const adminPassword = process.env.ADMIN_PASSWORD;
-  if (!adminPassword) return true;
-
-  return request.headers.get("x-admin-password") === adminPassword;
-}
 
 type FileSpec = { filename?: string; contentType?: string; size?: number };
 
@@ -33,7 +27,7 @@ function buildObjectSpec(file: FileSpec, kind: "media" | "poster") {
 
 export async function POST(request: NextRequest) {
   if (!isAuthorized(request)) {
-    return NextResponse.json({ error: "管理密码无效。" }, { status: 401 });
+    return NextResponse.json({ error: "未登录或管理密码无效。" }, { status: 401 });
   }
 
   const body = (await request.json()) as { media?: FileSpec; poster?: FileSpec | null };

@@ -59,7 +59,6 @@ function VideoCard({
             src={withBasePath(video.src)}
             alt={video.title}
             loading="lazy"
-            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
           />
         ) : (
           <video

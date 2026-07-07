@@ -11,3 +11,5 @@ pnpm-debug.log*
 # Uploaded media can be large; keep samples in git, but ignore local uploads.
 public/uploads/*
 !public/uploads/.gitkeep
+.vercel
+.env*

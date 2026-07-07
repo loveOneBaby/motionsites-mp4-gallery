@@ -8,6 +8,7 @@ type AdminUploaderProps = {
 };
 
 const isStaticPreview = process.env.NEXT_PUBLIC_STATIC_PREVIEW === "true";
+const LARGE_FILE = 50 * 1024 * 1024; // 50MB 以上提醒
 
 function withBasePath(path?: string) {
   if (!path) return undefined;
@@ -62,14 +63,12 @@ function kindOf(file: File): "video" | "image" {
   return IMAGE_EXTS.includes(ext) ? "image" : "video";
 }
 
-/** 从文件名生成可读标题。 */
 function titleFromFilename(name: string): string {
   const base = name.replace(/\.[^.]+$/, "");
   const cleaned = base.replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
   return cleaned.slice(0, 60) || "未命名媒体";
 }
 
-/** 用 <video> + <canvas> 从视频中截取一帧作为封面图。失败返回 null。 */
 function generatePoster(videoFile: File): Promise<File | null> {
   return new Promise((resolve) => {
     const video = document.createElement("video");
@@ -139,11 +138,11 @@ type QueueItem = {
   file: File;
   kind: "video" | "image";
   title: string;
-  /** 队列缩略图:视频=封面,图片=自身。 */
   preview: string | null;
   status: Status;
   progress: number;
   error?: string;
+  warning?: string;
 };
 
 function newId() {
@@ -153,7 +152,6 @@ function newId() {
 
 export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
   const [videos, setVideos] = useState(initialVideos);
-  const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [queue, setQueue] = useState<QueueItem[]>([]);
@@ -161,17 +159,53 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
   const [tags, setTags] = useState("");
   const [featured, setFeatured] = useState(false);
   const [dragging, setDragging] = useState(false);
+
+  // 鉴权状态:null=检查中,false=未登录,true=已登录
+  const [authed, setAuthed] = useState<boolean | null>(null);
+  const [loginPw, setLoginPw] = useState("");
+  const [loginBusy, setLoginBusy] = useState(false);
+
   const posterPromises = useRef<Map<string, Promise<File | null>>>(new Map());
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    const savedPassword = window.localStorage.getItem("motionsites-admin-password");
-    if (savedPassword) setPassword(savedPassword);
+    if (isStaticPreview) {
+      setAuthed(false);
+      return;
+    }
+    fetch(apiPath("/api/auth/me"))
+      .then((r) => setAuthed(r.ok))
+      .catch(() => setAuthed(false));
   }, []);
 
-  function savePassword(value: string) {
-    setPassword(value);
-    window.localStorage.setItem("motionsites-admin-password", value);
+  async function login(event: FormEvent) {
+    event.preventDefault();
+    setLoginBusy(true);
+    setMessage("");
+    try {
+      const res = await fetch(apiPath("/api/auth/login"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: loginPw })
+      });
+      if (res.ok) {
+        setAuthed(true);
+        setLoginPw("");
+      } else {
+        const data = (await res.json()) as { error?: string };
+        setMessage(data.error || "登录失败。");
+      }
+    } catch {
+      setMessage("网络错误,登录失败。");
+    } finally {
+      setLoginBusy(false);
+    }
+  }
+
+  async function logout() {
+    await fetch(apiPath("/api/auth/logout"), { method: "POST" });
+    setAuthed(false);
+    setQueue([]);
   }
 
   function addFiles(fileList: FileList | File[]) {
@@ -190,13 +224,15 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
         title: titleFromFilename(file.name),
         preview: kind === "image" ? URL.createObjectURL(file) : null,
         status: "pending" as Status,
-        progress: 0
+        progress: 0,
+        warning: file.size > LARGE_FILE
+          ? `文件较大(${Math.round(file.size / 1024 / 1024)} MB),上传可能较慢`
+          : undefined
       };
     });
     setQueue((q) => [...q, ...newItems]);
     setMessage(`已添加 ${newItems.length} 个文件,可编辑标题后点“全部上传”。`);
 
-    // 为视频项异步生成封面
     for (const item of newItems) {
       if (item.kind !== "video") continue;
       const p = generatePoster(item.file).catch(() => null);
@@ -247,7 +283,7 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
   }
 
   async function uploadOne(item: QueueItem): Promise<VideoItem> {
-    const authHeaders = password ? { "x-admin-password": password } : undefined;
+    // cookie 同源自动携带,无需密码头。
     const poster =
       item.kind === "video"
         ? await (posterPromises.current.get(item.id) ?? Promise.resolve(null))
@@ -255,7 +291,7 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
 
     const urlResponse = await fetch(apiPath("/api/videos/upload-url"), {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         media: {
           filename: item.file.name,
@@ -279,7 +315,7 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
 
     const recordResponse = await fetch(apiPath("/api/videos"), {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         title: item.title,
         category,
@@ -298,7 +334,7 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
   async function uploadAll(event: FormEvent) {
     event.preventDefault();
     if (isStaticPreview) {
-      setMessage("GitHub Pages 预览为只读。请运行 Node 应用或部署到服务器后再上传。");
+      setMessage("GitHub Pages 预览为只读。");
       return;
     }
     const pending = queue.filter((it) => it.status !== "done" && it.status !== "uploading");
@@ -344,10 +380,7 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
       return;
     }
 
-    const response = await fetch(apiPath(`/api/videos/${id}`), {
-      method: "DELETE",
-      headers: password ? { "x-admin-password": password } : undefined
-    });
+    const response = await fetch(apiPath(`/api/videos/${id}`), { method: "DELETE" });
     const payload = (await response.json()) as { error?: string };
     if (!response.ok) {
       setMessage(payload.error || "删除失败。");
@@ -363,55 +396,92 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
     padding: 20,
     textAlign: "center",
     background: dragging ? "rgba(79,124,255,0.08)" : "transparent",
-    cursor: isStaticPreview ? "not-allowed" : "pointer",
+    cursor: "pointer",
     transition: "all 0.15s"
   };
-
   const thumbStyle: CSSProperties = { width: 48, height: 36, objectFit: "cover", borderRadius: 4 };
   const placeholderStyle: CSSProperties = {
     width: 48, height: 36, borderRadius: 4, background: "#222", color: "#aaa",
     fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center"
   };
 
+  // 静态预览:只读提示
+  if (isStaticPreview) {
+    return (
+      <section className="admin-grid">
+        <p className="status-message static-preview-note">
+          GitHub Pages 静态预览:此处禁用上传和删除操作。请访问可运行服务端的部署(如 Vercel)以上传。
+        </p>
+        <div className="admin-list-panel">
+          <div className="admin-list-heading"><h2>图库</h2></div>
+          <div className="admin-video-list">
+            {videos.map((video) => (
+              <article className="admin-video-row" key={video.id}>
+                {video.kind === "image" ? (
+                  <img src={withBasePath(video.src)} alt={video.title} style={{ width: 80, height: 45, objectFit: "cover", borderRadius: 4 }} />
+                ) : (
+                  <video src={withBasePath(video.src)} poster={withBasePath(video.poster)} muted playsInline preload="metadata" />
+                )}
+                <div><strong>{video.title}</strong><span>{video.category}</span>{video.featured && <em>推荐</em>}</div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // 检查登录状态
+  if (authed === null) {
+    return <section className="admin-grid"><p className="status-message">正在检查登录状态…</p></section>;
+  }
+
+  // 未登录:登录表单
+  if (!authed) {
+    return (
+      <section className="admin-grid">
+        <form className="upload-panel" onSubmit={login} style={{ maxWidth: 360 }}>
+          <h2 style={{ marginTop: 0 }}>管理员登录</h2>
+          <label>
+            管理密码
+            <input
+              type="password"
+              value={loginPw}
+              onChange={(e) => setLoginPw(e.target.value)}
+              required
+              autoFocus
+              autoComplete="current-password"
+            />
+          </label>
+          <button className="pill-button upload-submit" type="submit" disabled={loginBusy}>
+            {loginBusy ? "登录中…" : "登录"}
+          </button>
+          {message && <p className="status-message">{message}</p>}
+        </form>
+      </section>
+    );
+  }
+
+  // 已登录:上传界面
   return (
     <section className="admin-grid">
       <form className="upload-panel" onSubmit={uploadAll}>
-        {isStaticPreview && (
-          <p className="status-message static-preview-note">
-            GitHub Pages 静态预览:此处禁用上传和删除操作。
-          </p>
-        )}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <h2 style={{ margin: 0 }}>上传</h2>
+          <button type="button" onClick={logout} className="pill-button small">退出登录</button>
+        </div>
 
-        <label>
-          管理密码
-          <input
-            value={password}
-            onChange={(event) => savePassword(event.target.value)}
-            type="password"
-            placeholder="来自 ADMIN_PASSWORD 的值"
-            autoComplete="current-password"
-          />
-        </label>
-
-        {/* 拖拽 / 选择区 */}
         <div
           style={dropZoneStyle}
-          onDragOver={(e) => {
-            e.preventDefault();
-            if (!isStaticPreview) setDragging(true);
-          }}
+          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
-          onClick={() => !isStaticPreview && fileInputRef.current?.click()}
+          onClick={() => fileInputRef.current?.click()}
           role="button"
           tabIndex={0}
         >
-          <p style={{ margin: 0 }}>
-            {dragging ? "松开即可添加" : "把视频/图片拖到此处,或点击选择"}
-          </p>
-          <p style={{ margin: "6px 0 0", fontSize: 12, color: "#888" }}>
-            支持批量;视频自动生成标题与封面,图片作为图库项
-          </p>
+          <p style={{ margin: 0 }}>{dragging ? "松开即可添加" : "把视频/图片拖到此处,或点击选择"}</p>
+          <p style={{ margin: "6px 0 0", fontSize: 12, color: "#888" }}>支持批量;视频自动生成标题与封面,图片作为图库项</p>
           <input
             ref={fileInputRef}
             type="file"
@@ -422,7 +492,6 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
           />
         </div>
 
-        {/* 批量共用属性 */}
         <label>
           分类(应用于本批全部)
           <input value={category} onChange={(e) => setCategory(e.target.value)} required />
@@ -436,16 +505,11 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
           <span>推荐本批到顶部大卡片</span>
         </label>
 
-        {/* 队列 */}
         {queue.length > 0 && (
           <div className="admin-video-list" style={{ flexDirection: "column" }}>
             {queue.map((item) => (
               <div key={item.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "6px 0", borderBottom: "1px solid #eee" }}>
-                {item.preview ? (
-                  <img src={item.preview} alt="" style={thumbStyle} />
-                ) : (
-                  <div style={placeholderStyle}>视频</div>
-                )}
+                {item.preview ? <img src={item.preview} alt="" style={thumbStyle} /> : <div style={placeholderStyle}>视频</div>}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <input
                     value={item.title}
@@ -456,46 +520,35 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
                   <div style={{ fontSize: 11, color: "#888" }}>
                     {item.kind === "image" ? "图片" : "视频"} · {item.file.name}
                   </div>
+                  {item.warning && <div style={{ fontSize: 11, color: "#b80" }}>{item.warning}</div>}
                   {item.status === "uploading" && (
                     <div style={{ height: 4, background: "#eee", borderRadius: 2, marginTop: 4 }}>
                       <div style={{ width: `${item.progress}%`, height: "100%", background: "#4f7cff", borderRadius: 2 }} />
                     </div>
                   )}
-                  {item.status === "error" && (
-                    <div style={{ fontSize: 11, color: "#d33" }}>{item.error}</div>
-                  )}
-                  {item.status === "done" && (
-                    <div style={{ fontSize: 11, color: "#3a9" }}>已上传</div>
-                  )}
+                  {item.status === "error" && <div style={{ fontSize: 11, color: "#d33" }}>{item.error}</div>}
+                  {item.status === "done" && <div style={{ fontSize: 11, color: "#3a9" }}>已上传</div>}
                 </div>
                 {item.status !== "uploading" && item.status !== "done" && (
                   <button type="button" onClick={() => removeItem(item.id)} className="pill-button small">移除</button>
                 )}
               </div>
             ))}
-            <button type="button" onClick={clearFinished} className="pill-button small" style={{ marginTop: 8, alignSelf: "flex-start" }}>
-              清除已完成
-            </button>
+            <button type="button" onClick={clearFinished} className="pill-button small" style={{ marginTop: 8, alignSelf: "flex-start" }}>清除已完成</button>
           </div>
         )}
 
-        <button
-          className="pill-button upload-submit"
-          type="submit"
-          disabled={busy || isStaticPreview || queue.length === 0}
-        >
+        <button className="pill-button upload-submit" type="submit" disabled={busy || queue.length === 0}>
           {busy ? "上传中…" : `全部上传(${queue.filter((it) => it.status !== "done").length})`}
         </button>
-
         {message && <p className="status-message">{message}</p>}
       </form>
 
       <div className="admin-list-panel">
         <div className="admin-list-heading">
           <h2>图库</h2>
-          <button type="button" onClick={refreshVideos} disabled={isStaticPreview}>刷新</button>
+          <button type="button" onClick={refreshVideos}>刷新</button>
         </div>
-
         <div className="admin-video-list">
           {videos.map((video) => (
             <article className="admin-video-row" key={video.id}>
@@ -509,7 +562,7 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
                 <span>{video.category}</span>
                 {video.featured && <em>推荐</em>}
               </div>
-              <button type="button" onClick={() => handleDelete(video.id)} disabled={isStaticPreview}>删除</button>
+              <button type="button" onClick={() => handleDelete(video.id)}>删除</button>
             </article>
           ))}
         </div>
