@@ -16,6 +16,8 @@ const R2_PUBLIC_BASE_URL = (process.env.R2_PUBLIC_BASE_URL || "").replace(/\/+$/
 
 // 视频元数据在 R2 中的存储 key(serverless 部署时用,替代本地 data/videos.json)。
 const METADATA_KEY = "metadata/videos.json";
+// 写入前的上一版备份(R2 Object Versioning 不可用时的应用级兜底)。
+export const METADATA_PREV_KEY = "metadata/videos.prev.json";
 
 let cachedClient: S3Client | null = null;
 
@@ -73,10 +75,10 @@ export async function createPresignedPut({
 }
 
 /** 读取 R2 中的元数据 JSON;对象不存在时返回 null。 */
-export async function getJsonMetadata<T>(): Promise<T | null> {
+export async function getJsonMetadata<T>(key: string = METADATA_KEY): Promise<T | null> {
   try {
     const response = await getClient().send(
-      new GetObjectCommand({ Bucket: R2_BUCKET, Key: METADATA_KEY })
+      new GetObjectCommand({ Bucket: R2_BUCKET, Key: key })
     );
     const text = await response.Body?.transformToString("utf8");
     if (!text) return null;
@@ -90,15 +92,23 @@ export async function getJsonMetadata<T>(): Promise<T | null> {
 }
 
 /** 把元数据 JSON 写入 R2。 */
-export async function putJsonMetadata(data: unknown): Promise<void> {
+export async function putJsonMetadata(data: unknown, key: string = METADATA_KEY): Promise<void> {
   await getClient().send(
     new PutObjectCommand({
       Bucket: R2_BUCKET,
-      Key: METADATA_KEY,
+      Key: key,
       Body: JSON.stringify(data, null, 2),
       ContentType: "application/json"
     })
   );
+}
+
+/** 用上一版备份覆盖主元数据(R2 Object Versioning 不可用时的回滚手段)。 */
+export async function restoreMetadataBackup(): Promise<boolean> {
+  const prev = await getJsonMetadata<unknown[]>(METADATA_PREV_KEY);
+  if (!Array.isArray(prev)) return false;
+  await putJsonMetadata(prev, METADATA_KEY);
+  return true;
 }
 
 /** 根据公开 URL 删除对应 R2 对象(仅删除属于本 R2 域名的对象,本地样例不动)。 */

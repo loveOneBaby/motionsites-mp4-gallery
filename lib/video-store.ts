@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { promises as fs } from "fs";
 import path from "path";
-import { isR2Configured, getJsonMetadata, putJsonMetadata } from "./r2";
+import { isR2Configured, getJsonMetadata, putJsonMetadata, METADATA_PREV_KEY } from "./r2";
 
 export type VideoItem = {
   id: string;
@@ -105,6 +105,15 @@ function withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
 async function writeJson(videos: VideoItem[]) {
   // 配置了 R2 时写到 R2;否则写本地(仅本地开发用,serverless 下走 R2 分支)。
   if (isR2Configured()) {
+    // 写入前把当前主版本备份到 prev,作为误覆盖兜底(R2 Object Versioning 不可用时)。
+    try {
+      const current = await getJsonMetadata<VideoItem[]>();
+      if (Array.isArray(current)) {
+        await putJsonMetadata(current, METADATA_PREV_KEY);
+      }
+    } catch {
+      // 备份失败不阻塞主写入
+    }
     await putJsonMetadata(videos);
     return;
   }
