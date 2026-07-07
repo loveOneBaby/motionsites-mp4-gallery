@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import type { VideoItem } from "../../lib/video-store";
 
 type AdminUploaderProps = {
@@ -53,20 +53,149 @@ type UploadUrls = {
   poster?: { key: string; uploadUrl: string; contentType: string };
 };
 
+/** 从视频文件名生成可读标题。 */
+function titleFromFilename(name: string): string {
+  const base = name.replace(/\.[^.]+$/, "");
+  const cleaned = base.replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+  return cleaned.slice(0, 60) || "未命名视频";
+}
+
+/** 用 <video> + <canvas> 从视频中截取一帧作为封面图。失败返回 null。 */
+function generatePoster(videoFile: File): Promise<File | null> {
+  return new Promise((resolve) => {
+    const video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "auto";
+    const url = URL.createObjectURL(videoFile);
+    let settled = false;
+    const finish = (result: File | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      URL.revokeObjectURL(url);
+      resolve(result);
+    };
+    const timeout = setTimeout(() => finish(null), 10000);
+
+    video.onloadedmetadata = () => {
+      const dur = isFinite(video.duration) && video.duration > 0 ? video.duration : 0;
+      const seekTo = dur > 0 ? Math.min(Math.max(dur * 0.2, 0.1), 2) : 0.1;
+      try {
+        video.currentTime = seekTo;
+      } catch {
+        finish(null);
+      }
+    };
+    video.onseeked = () => {
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      if (!w || !h) {
+        finish(null);
+        return;
+      }
+      try {
+        const maxW = 960;
+        const scale = Math.min(1, maxW / w);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(w * scale);
+        canvas.height = Math.round(h * scale);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          finish(null);
+          return;
+        }
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            finish(null);
+            return;
+          }
+          const base = videoFile.name.replace(/\.[^.]+$/, "");
+          finish(new File([blob], `${base}-poster.jpg`, { type: "image/jpeg" }));
+        }, "image/jpeg", 0.82);
+      } catch {
+        finish(null);
+      }
+    };
+    video.onerror = () => finish(null);
+    video.src = url;
+  });
+}
+
 export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
   const [videos, setVideos] = useState(initialVideos);
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [posterFile, setPosterFile] = useState<File | null>(null);
+  const [posterPreview, setPosterPreview] = useState<string | null>(null);
+  const [title, setTitle] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const posterInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const savedPassword = window.localStorage.getItem("motionsites-admin-password");
     if (savedPassword) setPassword(savedPassword);
   }, []);
 
+  // 释放封面预览的 object URL,避免内存泄漏。
+  useEffect(() => {
+    return () => {
+      if (posterPreview) URL.revokeObjectURL(posterPreview);
+    };
+  }, [posterPreview]);
+
   function savePassword(value: string) {
     setPassword(value);
     window.localStorage.setItem("motionsites-admin-password", value);
+  }
+
+  async function onVideoChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    if (!file) {
+      setVideoFile(null);
+      return;
+    }
+    setVideoFile(file);
+    setTitle(titleFromFilename(file.name));
+
+    setGenerating(true);
+    setMessage("已生成标题,正在从视频截取封面…");
+    const poster = await generatePoster(file).catch(() => null);
+    setGenerating(false);
+
+    if (poster) {
+      setPosterFile(poster);
+      setPosterPreview(URL.createObjectURL(poster));
+      setMessage("已自动生成标题与封面,可编辑后点“上传视频”。");
+    } else {
+      setPosterFile(null);
+      setPosterPreview(null);
+      setMessage("标题已生成;封面自动截取失败(浏览器无法解码该视频),可手动选择封面图。");
+    }
+  }
+
+  function onPosterChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    if (!file) return;
+    setPosterFile(file);
+    setPosterPreview(URL.createObjectURL(file));
+  }
+
+  function removePoster() {
+    setPosterFile(null);
+    setPosterPreview(null);
+    if (posterInputRef.current) posterInputRef.current.value = "";
+  }
+
+  function resetForm(form: HTMLFormElement) {
+    form.reset();
+    setVideoFile(null);
+    setPosterFile(null);
+    setPosterPreview(null);
+    setTitle("");
   }
 
   async function refreshVideos() {
@@ -90,22 +219,19 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
 
     const form = event.currentTarget;
     const formData = new FormData(form);
-    const videoFile = formData.get("video");
 
-    if (!(videoFile instanceof File) || videoFile.size === 0) {
+    if (!videoFile) {
       setMessage("请选择视频文件。");
       return;
     }
 
-    const posterFile = formData.get("poster");
-    const hasPoster = posterFile instanceof File && posterFile.size > 0;
     const authHeaders = password ? { "x-admin-password": password } : undefined;
 
     setBusy(true);
     setMessage("获取上传地址…");
 
     try {
-      // 1) 向服务端申请预签名直传地址
+      // 1) 向服务端申请预签名直传地址(视频 + 可选封面)
       const urlResponse = await fetch(apiPath("/api/videos/upload-url"), {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders },
@@ -115,7 +241,7 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
             contentType: videoFile.type || "video/mp4",
             size: videoFile.size
           },
-          poster: hasPoster
+          poster: posterFile
             ? {
                 filename: posterFile.name,
                 contentType: posterFile.type || "image/jpeg",
@@ -135,9 +261,9 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
         setMessage(`正在上传视频 ${pct}%`)
       );
 
-      if (hasPoster && urls.poster) {
+      if (posterFile && urls.poster) {
         setMessage("正在上传封面图…");
-        await putFile(urls.poster.uploadUrl, posterFile as File, urls.poster.contentType, () => undefined);
+        await putFile(urls.poster.uploadUrl, posterFile, urls.poster.contentType, () => undefined);
       }
 
       // 3) 回传元数据,写入图库
@@ -146,7 +272,7 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({
-          title: String(formData.get("title") || ""),
+          title,
           category: String(formData.get("category") || ""),
           tags: String(formData.get("tags") || ""),
           featured: formData.get("featured") === "on",
@@ -160,7 +286,7 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
         throw new Error(payload.error || "保存失败。");
       }
 
-      form.reset();
+      resetForm(form);
       setVideos((current) => [payload.video!, ...current]);
       setMessage("上传成功。");
     } catch (error) {
@@ -216,7 +342,13 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
 
         <label>
           标题
-          <input name="title" required placeholder="极光山谷循环" />
+          <input
+            name="title"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            required
+            placeholder="选择视频后自动生成,可编辑"
+          />
         </label>
 
         <label>
@@ -231,12 +363,49 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
 
         <label>
           MP4 / WebM / MOV 文件
-          <input name="video" type="file" accept="video/mp4,video/webm,video/quicktime" required />
+          <input
+            name="video"
+            type="file"
+            accept="video/mp4,video/webm,video/quicktime"
+            required
+            onChange={onVideoChange}
+          />
         </label>
 
         <label>
-          封面图(可选)
-          <input name="poster" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
+          封面图(自动从视频截取,可更换)
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+            {posterPreview && (
+              <img
+                src={posterPreview}
+                alt="封面预览"
+                style={{ width: 96, height: 54, objectFit: "cover", borderRadius: 6 }}
+              />
+            )}
+            <button
+              type="button"
+              onClick={() => posterInputRef.current?.click()}
+              disabled={generating}
+              className="pill-button small"
+            >
+              {posterFile ? "更换封面" : "选择封面(可选)"}
+            </button>
+            {posterFile && (
+              <button type="button" onClick={removePoster} className="pill-button small">
+                移除
+              </button>
+            )}
+            <input
+              ref={posterInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              onChange={onPosterChange}
+              style={{ display: "none" }}
+            />
+          </div>
+          {generating && (
+            <span style={{ fontSize: 12, color: "#888" }}>正在从视频截取封面…</span>
+          )}
         </label>
 
         <label className="checkbox-row">
@@ -244,7 +413,11 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
           <span>在顶部大卡片中推荐该视频</span>
         </label>
 
-        <button className="pill-button upload-submit" type="submit" disabled={busy || isStaticPreview}>
+        <button
+          className="pill-button upload-submit"
+          type="submit"
+          disabled={busy || generating || isStaticPreview}
+        >
           {busy ? "上传中…" : "上传视频"}
         </button>
 
