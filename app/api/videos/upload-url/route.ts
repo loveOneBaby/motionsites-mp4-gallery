@@ -14,15 +14,21 @@ export const dynamic = "force-dynamic";
 
 type FileSpec = { filename?: string; contentType?: string; size?: number };
 
-function buildObjectSpec(file: FileSpec, kind: "media" | "poster") {
-  // media:视频或图片;poster:仅图片。
+type ObjectKind = "media" | "poster" | "thumb";
+
+function buildObjectSpec(file: FileSpec, kind: ObjectKind) {
+  // media:视频或图片;poster/thumb:仅图片。
   const allowed = kind === "media" ? new Set([...VIDEO_EXTENSIONS, ...IMAGE_EXTENSIONS]) : IMAGE_EXTENSIONS;
   const fallback = kind === "media" ? ".mp4" : ".jpg";
   const ext = safeExtension(file.filename || "", allowed, fallback);
-  const contentType = file.contentType || (kind === "poster" ? "image/jpeg" : "video/mp4");
-  const folder = kind === "poster" ? "uploads/posters" : "uploads/media";
+  const contentType = file.contentType || (kind === "media" ? "video/mp4" : "image/jpeg");
+  const folder = kind === "poster" ? "uploads/posters" : kind === "thumb" ? "uploads/thumbs" : "uploads/media";
   const key = `${folder}/${newVideoId()}${ext}`;
   return { key, contentType };
+}
+
+async function presign(spec: { key: string; contentType: string }) {
+  return { key: spec.key, uploadUrl: await createPresignedPut(spec), contentType: spec.contentType };
 }
 
 export async function POST(request: NextRequest) {
@@ -30,47 +36,32 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "未登录或管理密码无效。" }, { status: 401 });
   }
 
-  const body = (await request.json()) as { media?: FileSpec; poster?: FileSpec | null };
+  const body = (await request.json()) as {
+    media?: FileSpec;
+    poster?: FileSpec | null;
+    thumb?: FileSpec | null;
+  };
 
   const media = body.media;
   if (!media || !media.filename || typeof media.size !== "number") {
     return NextResponse.json({ error: "缺少文件信息。" }, { status: 400 });
   }
-
   if (media.size > MAX_VIDEO_BYTES) {
     return NextResponse.json({ error: "文件过大。限制为 250 MB。" }, { status: 413 });
   }
 
   try {
-    const mediaSpec = buildObjectSpec(media, "media");
-    const mediaUploadUrl = await createPresignedPut({
-      key: mediaSpec.key,
-      contentType: mediaSpec.contentType
-    });
-
     const result: {
       media: { key: string; uploadUrl: string; contentType: string };
       poster?: { key: string; uploadUrl: string; contentType: string };
-    } = {
-      media: {
-        key: mediaSpec.key,
-        uploadUrl: mediaUploadUrl,
-        contentType: mediaSpec.contentType
-      }
-    };
+      thumb?: { key: string; uploadUrl: string; contentType: string };
+    } = { media: await presign(buildObjectSpec(media, "media")) };
 
-    const poster = body.poster;
-    if (poster && poster.filename) {
-      const posterSpec = buildObjectSpec(poster, "poster");
-      const posterUploadUrl = await createPresignedPut({
-        key: posterSpec.key,
-        contentType: posterSpec.contentType
-      });
-      result.poster = {
-        key: posterSpec.key,
-        uploadUrl: posterUploadUrl,
-        contentType: posterSpec.contentType
-      };
+    if (body.poster && body.poster.filename) {
+      result.poster = await presign(buildObjectSpec(body.poster, "poster"));
+    }
+    if (body.thumb && body.thumb.filename) {
+      result.thumb = await presign(buildObjectSpec(body.thumb, "thumb"));
     }
 
     return NextResponse.json(result);

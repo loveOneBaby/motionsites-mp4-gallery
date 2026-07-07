@@ -52,6 +52,7 @@ function putFile(
 type UploadUrls = {
   media: { key: string; uploadUrl: string; contentType: string };
   poster?: { key: string; uploadUrl: string; contentType: string };
+  thumb?: { key: string; uploadUrl: string; contentType: string };
 };
 
 const IMAGE_EXTS = [".jpg", ".jpeg", ".png", ".webp", ".gif"];
@@ -131,6 +132,55 @@ function generatePoster(videoFile: File): Promise<File | null> {
   });
 }
 
+/** 用 <img> + <canvas> 给图片生成一张缩略图(网格用,宽边 ≤480)。失败返回 null。 */
+function generateImageThumb(imageFile: File, maxW = 480): Promise<File | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(imageFile);
+    let settled = false;
+    const finish = (result: File | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      URL.revokeObjectURL(url);
+      resolve(result);
+    };
+    const timeout = setTimeout(() => finish(null), 8000);
+    img.onload = () => {
+      try {
+        const w = img.naturalWidth;
+        const h = img.naturalHeight;
+        if (!w || !h) {
+          finish(null);
+          return;
+        }
+        const scale = Math.min(1, maxW / w);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(w * scale);
+        canvas.height = Math.round(h * scale);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          finish(null);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            finish(null);
+            return;
+          }
+          const base = imageFile.name.replace(/\.[^.]+$/, "");
+          finish(new File([blob], `${base}-thumb.jpg`, { type: "image/jpeg" }));
+        }, "image/jpeg", 0.8);
+      } catch {
+        finish(null);
+      }
+    };
+    img.onerror = () => finish(null);
+    img.src = url;
+  });
+}
+
 type Status = "pending" | "uploading" | "done" | "error";
 
 type QueueItem = {
@@ -160,12 +210,21 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
   const [featured, setFeatured] = useState(false);
   const [dragging, setDragging] = useState(false);
 
+  // 行内编辑
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editCategory, setEditCategory] = useState("");
+  const [editTags, setEditTags] = useState("");
+  const [editFeatured, setEditFeatured] = useState(false);
+  const [editBusy, setEditBusy] = useState(false);
+
   // 鉴权状态:null=检查中,false=未登录,true=已登录
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [loginPw, setLoginPw] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
 
   const posterPromises = useRef<Map<string, Promise<File | null>>>(new Map());
+  const thumbPromises = useRef<Map<string, Promise<File | null>>>(new Map());
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -247,6 +306,12 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
         );
       });
     }
+
+    // 为图片项异步生成缩略图(网格用)
+    for (const item of newItems) {
+      if (item.kind !== "image") continue;
+      thumbPromises.current.set(item.id, generateImageThumb(item.file).catch(() => null));
+    }
   }
 
   function onFilePick(event: ChangeEvent<HTMLInputElement>) {
@@ -268,6 +333,7 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
     const item = queue.find((it) => it.id === id);
     if (item?.preview) URL.revokeObjectURL(item.preview);
     posterPromises.current.delete(id);
+    thumbPromises.current.delete(id);
     setQueue((q) => q.filter((it) => it.id !== id));
   }
 
@@ -288,6 +354,10 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
       item.kind === "video"
         ? await (posterPromises.current.get(item.id) ?? Promise.resolve(null))
         : null;
+    const thumb =
+      item.kind === "image"
+        ? await (thumbPromises.current.get(item.id) ?? Promise.resolve(null))
+        : null;
 
     const urlResponse = await fetch(apiPath("/api/videos/upload-url"), {
       method: "POST",
@@ -300,6 +370,9 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
         },
         poster: poster
           ? { filename: poster.name, contentType: poster.type || "image/jpeg", size: poster.size }
+          : null,
+        thumb: thumb
+          ? { filename: thumb.name, contentType: thumb.type || "image/jpeg", size: thumb.size }
           : null
       })
     });
@@ -312,6 +385,9 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
     if (poster && urls.poster) {
       await putFile(urls.poster.uploadUrl, poster, urls.poster.contentType, () => undefined);
     }
+    if (thumb && urls.thumb) {
+      await putFile(urls.thumb.uploadUrl, thumb, urls.thumb.contentType, () => undefined);
+    }
 
     const recordResponse = await fetch(apiPath("/api/videos"), {
       method: "POST",
@@ -323,6 +399,7 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
         featured,
         mediaKey: urls.media.key,
         posterKey: urls.poster?.key,
+        thumbKey: urls.thumb?.key,
         kind: item.kind
       })
     });
@@ -369,6 +446,46 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
     const response = await fetch(apiPath("/api/videos"), { cache: "no-store" });
     const payload = (await response.json()) as { videos: VideoItem[] };
     setVideos(payload.videos);
+  }
+
+  function startEdit(video: VideoItem) {
+    setEditingId(video.id);
+    setEditTitle(video.title);
+    setEditCategory(video.category);
+    setEditTags(video.tags.join(", "));
+    setEditFeatured(video.featured);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+  }
+
+  async function saveEdit(id: string) {
+    setEditBusy(true);
+    try {
+      const res = await fetch(apiPath(`/api/videos/${id}`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: editTitle,
+          category: editCategory,
+          tags: editTags,
+          featured: editFeatured
+        })
+      });
+      const data = (await res.json()) as { error?: string; video?: VideoItem };
+      if (!res.ok || !data.video) {
+        setMessage(data.error || "保存失败。");
+        return;
+      }
+      setVideos((curr) => curr.map((v) => (v.id === id ? data.video! : v)));
+      setEditingId(null);
+      setMessage("已更新。");
+    } catch {
+      setMessage("网络错误,保存失败。");
+    } finally {
+      setEditBusy(false);
+    }
   }
 
   async function handleDelete(id: string) {
@@ -556,21 +673,52 @@ export default function AdminUploader({ initialVideos }: AdminUploaderProps) {
           <button type="button" onClick={refreshVideos}>刷新</button>
         </div>
         <div className="admin-video-list">
-          {videos.map((video) => (
-            <article className="admin-video-row" key={video.id}>
-              {video.kind === "image" ? (
-                <img src={withBasePath(video.src)} alt={video.title} style={{ width: 80, height: 45, objectFit: "cover", borderRadius: 4 }} />
-              ) : (
-                <video src={withBasePath(video.src)} poster={withBasePath(video.poster)} muted playsInline preload="metadata" />
-              )}
-              <div>
-                <strong>{video.title}</strong>
-                <span>{video.category}</span>
-                {video.featured && <em>推荐</em>}
-              </div>
-              <button type="button" onClick={() => handleDelete(video.id)}>删除</button>
-            </article>
-          ))}
+          {videos.map((video) => {
+            const editing = editingId === video.id;
+            return (
+              <article
+                className="admin-video-row"
+                key={video.id}
+                style={editing ? { flexWrap: "wrap" } : undefined}
+              >
+                {video.kind === "image" ? (
+                  <img src={withBasePath(video.thumb || video.src)} alt={video.title} style={{ width: 80, height: 45, objectFit: "cover", borderRadius: 4 }} />
+                ) : (
+                  <video src={withBasePath(video.src)} poster={withBasePath(video.poster)} muted playsInline preload="metadata" />
+                )}
+                {editing ? (
+                  <div style={{ flex: 1, minWidth: 200, display: "flex", flexDirection: "column", gap: 6 }}>
+                    <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} placeholder="标题" />
+                    <input value={editCategory} onChange={(e) => setEditCategory(e.target.value)} placeholder="分类" />
+                    <input value={editTags} onChange={(e) => setEditTags(e.target.value)} placeholder="标签,逗号分隔" />
+                    <label className="checkbox-row">
+                      <input type="checkbox" checked={editFeatured} onChange={(e) => setEditFeatured(e.target.checked)} />
+                      <span>推荐</span>
+                    </label>
+                  </div>
+                ) : (
+                  <div>
+                    <strong>{video.title}</strong>
+                    <span>{video.category}</span>
+                    {video.featured && <em>推荐</em>}
+                  </div>
+                )}
+                {editing ? (
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button type="button" className="pill-button small" onClick={() => saveEdit(video.id)} disabled={editBusy}>
+                      {editBusy ? "保存中…" : "保存"}
+                    </button>
+                    <button type="button" className="pill-button small" onClick={cancelEdit} disabled={editBusy}>取消</button>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button type="button" className="pill-button small" onClick={() => startEdit(video)}>编辑</button>
+                    <button type="button" onClick={() => handleDelete(video.id)}>删除</button>
+                  </div>
+                )}
+              </article>
+            );
+          })}
         </div>
       </div>
     </section>

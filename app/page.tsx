@@ -3,7 +3,8 @@ import Link from "next/link";
 import Gallery from "./components/Gallery";
 import { getVideos } from "../lib/video-store";
 
-export const dynamic = "force-dynamic";
+// 首页 ISR:每 30 秒重生成一次,避免每请求都读 R2;写入时 revalidatePath 立即失效。
+export const revalidate = 30;
 
 function withBasePath(path: string) {
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";

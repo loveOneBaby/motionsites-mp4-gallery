@@ -10,6 +10,8 @@ export type VideoItem = {
   tags: string[];
   src: string;
   poster?: string;
+  /** 图片项的缩略图地址(网格用);视频项不用。 */
+  thumb?: string;
   featured: boolean;
   createdAt: string;
   /** 媒体类型:视频或图片。旧数据没有该字段时按视频处理。 */
@@ -18,7 +20,8 @@ export type VideoItem = {
 
 const ROOT = process.cwd();
 const DATA_DIR = path.join(ROOT, "data");
-const DB_PATH = path.join(DATA_DIR, "videos.json");
+// 允许测试用 VIDEOS_DB_PATH 覆盖本地数据路径(不影响 R2 模式)。
+const DB_PATH = process.env.VIDEOS_DB_PATH || path.join(DATA_DIR, "videos.json");
 
 export const MAX_VIDEO_BYTES = 250 * 1024 * 1024;
 export const VIDEO_EXTENSIONS = new Set([".mp4", ".webm", ".mov", ".m4v"]);
@@ -148,5 +151,28 @@ export async function deleteVideo(id: string): Promise<VideoItem | null> {
     if (!target) return null;
     await writeJson(videos.filter((video) => video.id !== id));
     return target;
+  });
+}
+
+/** 更新一条记录的可变字段(标题/分类/标签/推荐)。返回更新后的项,未找到返回 null。 */
+export async function updateVideo(
+  id: string,
+  patch: Partial<Pick<VideoItem, "title" | "category" | "tags" | "featured">>
+): Promise<VideoItem | null> {
+  return withWriteLock(async () => {
+    const videos = await readJson();
+    const idx = videos.findIndex((video) => video.id === id);
+    if (idx === -1) return null;
+    const current = videos[idx];
+    const updated: VideoItem = {
+      ...current,
+      ...(patch.title !== undefined ? { title: patch.title } : null),
+      ...(patch.category !== undefined ? { category: patch.category } : null),
+      ...(patch.tags !== undefined ? { tags: patch.tags } : null),
+      ...(patch.featured !== undefined ? { featured: patch.featured } : null)
+    };
+    videos[idx] = updated;
+    await writeJson(videos);
+    return updated;
   });
 }

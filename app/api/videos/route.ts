@@ -12,6 +12,7 @@ import {
 } from "../../../lib/video-store";
 import { publicUrlFor } from "../../../lib/r2";
 import { isAuthorized } from "../../../lib/auth";
+import { revalidatePath } from "next/cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,6 +34,7 @@ export async function POST(request: NextRequest) {
     featured?: boolean | string;
     mediaKey?: string;
     posterKey?: string;
+    thumbKey?: string;
     kind?: "video" | "image";
   };
 
@@ -55,12 +57,14 @@ export async function POST(request: NextRequest) {
       tags: parseTags(body.tags),
       src: publicUrlFor(body.mediaKey),
       poster: body.posterKey ? publicUrlFor(body.posterKey) : undefined,
+      thumb: body.thumbKey ? publicUrlFor(body.thumbKey) : undefined,
       featured: body.featured === true || body.featured === "on" || body.featured === "true",
       createdAt: new Date().toISOString(),
       kind
     };
 
     await recordVideo(item);
+    revalidatePath("/", "page");
     return NextResponse.json({ video: item }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "保存失败。";

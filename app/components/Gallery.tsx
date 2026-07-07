@@ -63,7 +63,7 @@ function VideoCard({
     >
       <button className="video-hit-area" type="button" onClick={() => onOpen(video)}>
         {isImage ? (
-          <img src={withBasePath(video.src)} alt={video.title} loading="lazy" />
+          <img src={withBasePath(video.thumb || video.src)} alt={video.title} loading="lazy" />
         ) : (
           <video
             ref={videoRef}
@@ -116,6 +116,7 @@ export default function Gallery({ videos }: GalleryProps) {
   const [selected, setSelected] = useState<VideoItem | null>(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
+  const [visibleCount, setVisibleCount] = useState(12);
 
   const categories = useMemo(() => uniqueCategories(videos), [videos]);
 
@@ -133,6 +134,12 @@ export default function Gallery({ videos }: GalleryProps) {
 
   const featured = filtered.slice(0, 2);
   const rest = filtered.slice(2);
+  const visibleRest = rest.slice(0, visibleCount);
+
+  // 筛选条件变化时重置分批计数。
+  useEffect(() => {
+    setVisibleCount(12);
+  }, [kindFilter, query, category]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -186,10 +193,22 @@ export default function Gallery({ videos }: GalleryProps) {
           </div>
 
           <div className="video-grid">
-            {rest.map((video) => (
+            {visibleRest.map((video) => (
               <VideoCard video={video} onOpen={setSelected} key={video.id} />
             ))}
           </div>
+
+          {rest.length > visibleCount && (
+            <div style={{ display: "flex", justifyContent: "center", margin: "24px 0" }}>
+              <button
+                type="button"
+                className="pill-button"
+                onClick={() => setVisibleCount((c) => c + 12)}
+              >
+                显示更多({rest.length - visibleCount})
+              </button>
+            </div>
+          )}
         </>
       )}
 
