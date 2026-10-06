@@ -9,13 +9,14 @@ export const dynamic = "force-dynamic";
 
 export async function DELETE(
   request: NextRequest,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await context.params;
   if (!isAuthorized(request)) {
     return NextResponse.json({ error: "未登录或管理密码无效。" }, { status: 401 });
   }
 
-  const target = await findVideo(context.params.id);
+  const target = await findVideo(id);
   if (!target) {
     return NextResponse.json({ error: "未找到该媒体。" }, { status: 404 });
   }
@@ -32,15 +33,16 @@ export async function DELETE(
     );
   }
 
-  await deleteVideo(context.params.id);
+  await deleteVideo(id);
   revalidatePath("/", "page");
   return NextResponse.json({ video: target });
 }
 
 export async function PATCH(
   request: NextRequest,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await context.params;
   if (!isAuthorized(request)) {
     return NextResponse.json({ error: "未登录或管理密码无效。" }, { status: 401 });
   }
@@ -64,7 +66,7 @@ export async function PATCH(
   else if (Array.isArray(body.tags)) patch.tags = body.tags;
   if (typeof body.featured === "boolean") patch.featured = body.featured;
 
-  const updated = await updateVideo(context.params.id, patch);
+  const updated = await updateVideo(id, patch);
   if (!updated) {
     return NextResponse.json({ error: "未找到该媒体。" }, { status: 404 });
   }
